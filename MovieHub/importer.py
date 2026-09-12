@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-QUALITY_PATTERN = re.compile(r"(?P<quality>480|720|1080)p", re.IGNORECASE)
+QUALITY_PATTERN = re.compile(r"(?P<quality>4k|480|720|1080)p?", re.IGNORECASE)
 YEAR_PATTERN = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
 IGNORED_TOKENS = {
     "web", "webdl", "web-dl", "webrip", "bluray", "blu-ray", "brrip", "dvdrip",
@@ -34,7 +34,8 @@ class MovieImporter:
         if not quality_match:
             return None
         year_match = YEAR_PATTERN.search(stem)
-        quality = f"{quality_match.group('quality')}p"
+        raw_quality = quality_match.group("quality").lower()
+        quality = "4k" if raw_quality == "4k" else f"{raw_quality}p"
         cutoff = min(
             [match.start() for match in (quality_match, year_match) if match]
         )
@@ -138,7 +139,8 @@ class MovieImporter:
                 movie.poster = metadata["poster"]
         if candidate.year and not movie.year:
             movie.year = candidate.year
-        setattr(movie, f"video_{candidate.quality[:-1]}_url", candidate.external_url)
+        quality_column = "video_4k_url" if candidate.quality == "4k" else f"video_{candidate.quality[:-1]}_url"
+        setattr(movie, quality_column, candidate.external_url)
         movie.metadata_status = status
         candidate.status = "imported"
         candidate.metadata_status = status

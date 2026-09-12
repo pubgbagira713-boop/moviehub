@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 from flask import Flask, abort, flash, redirect, render_template, request, send_from_directory, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, or_, text
+from urllib.parse import parse_qs, urlparse
 from werkzeug.utils import secure_filename
 
 from importer import MovieImporter
@@ -13,7 +15,8 @@ from importer import MovieImporter
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
 app.config.update(
-    SECRET_KEY=os.environ.get("MOVIEHUB_SECRET", "moviehub-development-key"),
+    SECRET_KEY=os.environ.get("MOVIEHUB_SECRET") or secrets.token_hex(32),
+    ADMIN_PASSWORD=os.environ.get("MOVIEHUB_ADMIN_PASSWORD"),
     SQLALCHEMY_DATABASE_URI=f"sqlite:///{BASE_DIR / 'database.db'}",
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     UPLOAD_FOLDER=str(BASE_DIR / "static" / "videos"),
@@ -44,6 +47,8 @@ class Movie(db.Model):
     video_480_url = db.Column(db.Text, nullable=True)
     video_720_url = db.Column(db.Text, nullable=True)
     video_1080_url = db.Column(db.Text, nullable=True)
+    video_4k_url = db.Column(db.Text, nullable=True)
+    trailer_url = db.Column(db.Text, nullable=True)
     original_title = db.Column(db.String(160), nullable=True)
     backdrop = db.Column(db.Text, nullable=True)
     director = db.Column(db.String(240), nullable=True)
@@ -58,7 +63,7 @@ class Movie(db.Model):
 
     @property
     def qualities(self):
-        return [("1080p", self.video_1080_url or self.video_1080), ("720p", self.video_720_url or self.video_720), ("480p", self.video_480_url or self.video_480)]
+        return [("4K UHD", self.video_4k_url), ("1080p HD", self.video_1080_url or self.video_1080), ("720p HD", self.video_720_url or self.video_720), ("480p HD", self.video_480_url or self.video_480)]
 
 
 class ImportCandidate(db.Model):
@@ -146,11 +151,39 @@ def external_media_url(value):
     return None
 
 
+def normalize_youtube_url(value):
+    if not value:
+        return None
+    parsed = urlparse(value.strip())
+    host = parsed.netloc.lower().split(":", 1)[0]
+    video_id = ""
+    if host in {"youtube.com", "www.youtube.com", "m.youtube.com"}:
+        if parsed.path == "/watch":
+            video_id = parse_qs(parsed.query).get("v", [""])[0]
+        elif parsed.path.startswith("/shorts/"):
+            video_id = parsed.path.split("/", 2)[2].split("/", 1)[0]
+        elif parsed.path.startswith("/embed/"):
+            video_id = parsed.path.split("/", 2)[2].split("/", 1)[0]
+    elif host == "youtu.be":
+        video_id = parsed.path.strip("/").split("/", 1)[0]
+    if video_id and len(video_id) == 11:
+        return f"https://www.youtube.com/watch?v={video_id}"
+    return None
+
+
+def normalize_external_url(value):
+    value = (value or "").strip()
+    parsed = urlparse(value)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return value
+    return None
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
         password = request.form.get("password", "")
-        if password == os.environ.get("MOVIEHUB_ADMIN_PASSWORD", "moviehub-admin"):
+        if app.config["ADMIN_PASSWORD"] and password == app.config["ADMIN_PASSWORD"]:
             session["admin_authenticated"] = True
             return redirect(request.args.get("next") or url_for("admin_dashboard"))
         flash("That administrator password was not accepted.", "error")
@@ -182,6 +215,12 @@ def movie_from_form(movie=None):
     movie.rating = float(request.form.get("rating", 0) or 0)
     movie.duration = request.form.get("duration", "").strip()
     movie.cast = request.form.get("cast", "").strip()
+    movie.director = request.form.get("director", "").strip()
+    movie.trailer_url = normalize_youtube_url(request.form.get("trailer_url", ""))
+    movie.video_4k_url = normalize_external_url(request.form.get("video_4k_url"))
+    movie.video_1080_url = normalize_external_url(request.form.get("video_1080_url"))
+    movie.video_720_url = normalize_external_url(request.form.get("video_720_url"))
+    movie.video_480_url = normalize_external_url(request.form.get("video_480_url"))
     movie.featured = request.form.get("featured") == "on"
     poster = save_upload(request.files.get("poster"), app.config["POSTER_FOLDER"])
     if poster:
@@ -304,7 +343,7 @@ with app.app_context():
     inspector = inspect(db.engine)
     movie_columns = {column["name"] for column in inspector.get_columns("movie")}
     new_columns = {
-        "video_480_url": "TEXT", "video_720_url": "TEXT", "video_1080_url": "TEXT",
+        "video_480_url": "TEXT", "video_720_url": "TEXT", "video_1080_url": "TEXT", "video_4k_url": "TEXT", "trailer_url": "TEXT",
         "original_title": "VARCHAR(160)", "backdrop": "TEXT", "director": "VARCHAR(240)",
         "metadata_status": "VARCHAR(40)",
     }
