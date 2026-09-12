@@ -5,8 +5,10 @@ from pathlib import Path
 
 from flask import Flask, abort, flash, redirect, render_template, request, send_from_directory, session, url_for
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_
+from sqlalchemy import inspect, or_, text
 from werkzeug.utils import secure_filename
+
+from importer import MovieImporter
 
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
@@ -16,6 +18,9 @@ app.config.update(
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     UPLOAD_FOLDER=str(BASE_DIR / "static" / "videos"),
     POSTER_FOLDER=str(BASE_DIR / "static" / "images"),
+    IMPORT_FOLDER=os.environ.get("MOVIEHUB_IMPORT_FOLDER", str(BASE_DIR / "authorized_imports")),
+    EXTERNAL_MEDIA_BASE_URL=os.environ.get("MOVIEHUB_EXTERNAL_MEDIA_BASE_URL", "").rstrip("/"),
+    METADATA_API_KEY=os.environ.get("MOVIEHUB_METADATA_API_KEY", ""),
 )
 db = SQLAlchemy(app)
 
@@ -36,15 +41,36 @@ class Movie(db.Model):
     video_480 = db.Column(db.String(240), nullable=True)
     video_720 = db.Column(db.String(240), nullable=True)
     video_1080 = db.Column(db.String(240), nullable=True)
+    video_480_url = db.Column(db.Text, nullable=True)
+    video_720_url = db.Column(db.Text, nullable=True)
+    video_1080_url = db.Column(db.Text, nullable=True)
+    original_title = db.Column(db.String(160), nullable=True)
+    backdrop = db.Column(db.Text, nullable=True)
+    director = db.Column(db.String(240), nullable=True)
+    metadata_status = db.Column(db.String(40), nullable=True)
     featured = db.Column(db.Boolean, default=False)
 
     @property
     def poster_url(self):
+        if self.poster and self.poster.startswith(("http://", "https://")):
+            return self.poster
         return url_for("static", filename=f"images/{self.poster}")
 
     @property
     def qualities(self):
-        return [("1080p", self.video_1080), ("720p", self.video_720), ("480p", self.video_480)]
+        return [("1080p", self.video_1080_url or self.video_1080), ("720p", self.video_720_url or self.video_720), ("480p", self.video_480_url or self.video_480)]
+
+
+class ImportCandidate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    source_name = db.Column(db.String(240), nullable=False, unique=True)
+    external_url = db.Column(db.Text, nullable=False)
+    title = db.Column(db.String(160), nullable=False)
+    year = db.Column(db.Integer, nullable=True)
+    quality = db.Column(db.String(20), nullable=False)
+    metadata_status = db.Column(db.String(40), nullable=False, default="not_checked")
+    status = db.Column(db.String(40), nullable=False, default="pending")
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 def admin_required(view):
@@ -110,6 +136,16 @@ def media(filename):
     return send_from_directory(app.config["UPLOAD_FOLDER"], filename, as_attachment=True)
 
 
+def external_media_url(value):
+    if not value:
+        return None
+    if value.startswith(("http://", "https://")):
+        return value
+    if app.config["EXTERNAL_MEDIA_BASE_URL"]:
+        return f"{app.config['EXTERNAL_MEDIA_BASE_URL']}/{value.lstrip('/')}"
+    return None
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
@@ -166,6 +202,52 @@ def admin_dashboard():
     return render_template("admin/dashboard.html", movies=Movie.query.order_by(Movie.id.desc()).all())
 
 
+@app.route("/admin/import")
+@admin_required
+def import_movies():
+    candidates = ImportCandidate.query.order_by(ImportCandidate.updated_at.desc()).all()
+    return render_template("admin/import.html", candidates=candidates, import_folder=app.config["IMPORT_FOLDER"])
+
+
+@app.post("/admin/import/scan")
+@admin_required
+def scan_imports():
+    importer = MovieImporter(app, db, Movie, ImportCandidate)
+    found = importer.scan()
+    flash(f"Scan complete: {len(found)} authorized file reference(s) found.", "success")
+    return redirect(url_for("import_movies"))
+
+
+@app.post("/admin/import/<int:candidate_id>/import")
+@admin_required
+def import_candidate(candidate_id):
+    candidate = db.get_or_404(ImportCandidate, candidate_id)
+    importer = MovieImporter(app, db, Movie, ImportCandidate)
+    movie, created = importer.import_candidate(candidate)
+    flash(f"{'Created' if created else 'Updated'} {movie.title} with {candidate.quality}.", "success")
+    return redirect(url_for("import_movies"))
+
+
+@app.post("/admin/import/<int:candidate_id>/skip")
+@admin_required
+def skip_import(candidate_id):
+    candidate = db.get_or_404(ImportCandidate, candidate_id)
+    candidate.status = "skipped"
+    db.session.commit()
+    flash("Import skipped.", "success")
+    return redirect(url_for("import_movies"))
+
+
+@app.post("/admin/import/<int:candidate_id>/refresh")
+@admin_required
+def refresh_import_metadata(candidate_id):
+    candidate = db.get_or_404(ImportCandidate, candidate_id)
+    importer = MovieImporter(app, db, Movie, ImportCandidate)
+    importer.refresh_metadata(candidate)
+    flash("Metadata lookup refreshed.", "success")
+    return redirect(url_for("import_movies"))
+
+
 @app.route("/admin/movie/add", methods=["GET", "POST"])
 @admin_required
 def add_movie():
@@ -217,7 +299,19 @@ def server_error(error):
 with app.app_context():
     (BASE_DIR / "static" / "images").mkdir(parents=True, exist_ok=True)
     (BASE_DIR / "static" / "videos").mkdir(parents=True, exist_ok=True)
+    Path(app.config["IMPORT_FOLDER"]).mkdir(parents=True, exist_ok=True)
     db.create_all()
+    inspector = inspect(db.engine)
+    movie_columns = {column["name"] for column in inspector.get_columns("movie")}
+    new_columns = {
+        "video_480_url": "TEXT", "video_720_url": "TEXT", "video_1080_url": "TEXT",
+        "original_title": "VARCHAR(160)", "backdrop": "TEXT", "director": "VARCHAR(240)",
+        "metadata_status": "VARCHAR(40)",
+    }
+    for name, column_type in new_columns.items():
+        if name not in movie_columns:
+            db.session.execute(text(f"ALTER TABLE movie ADD COLUMN {name} {column_type}"))
+    db.session.commit()
 
 
 if __name__ == "__main__":

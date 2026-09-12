@@ -1,0 +1,7 @@
+
+BSSID, First time seen, Last time seen, channel, Speed, Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, ID-length, ESSID, Key
+DC:71:37:56:C8:88, 2026-06-13 21:32:34, 2026-06-13 21:36:36,  9, 130, WPA2, CCMP TKIP, PSK, -49,     2158,      847,   0.  0.  0.  0,  10, ZTE-Rcrejt, 
+
+Station MAC, First time seen, Last time seen, Power, # packets, BSSID, Probed ESSIDs
+40:B0:76:CA:E9:CA, 2026-06-13 21:32:44, 2026-06-13 21:36:32, -23,     1540, DC:71:37:56:C8:88,ZTE-Rcrejt
+
