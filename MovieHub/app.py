@@ -9,10 +9,12 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import inspect, or_, text
 from urllib.parse import parse_qs, urlparse
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
 
 from importer import MovieImporter
 
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=os.environ.get("MOVIEHUB_SECRET") or secrets.token_hex(32),
