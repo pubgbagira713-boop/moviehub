@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard | MovieHub{% endblock %}
+{% block content %}
+<section class="admin-shell">
+  <div class="admin-top"><div><p class="eyebrow">Private catalog</p><h1>Catalog overview</h1><p class="muted">{{ movies|length }} titles currently available.</p></div><div class="admin-actions"><a class="button button-dark" href="{{ url_for('admin_movie_new') }}">Add movie <span>+</span></a><form method="post" action="{{ url_for('admin_logout') }}"><button class="button button-quiet" type="submit">Log out</button></form></div></div>
+  {% with messages = get_flashed_messages(category_filter=['success']) %}{% if messages %}<div class="flash success">{{ messages[0] }}</div>{% endif %}{% endwith %}
+  <div class="admin-list">
+    {% for movie in movies %}<div class="admin-row"><img src="{{ poster_src(movie.poster_url) }}" alt=""><div class="admin-row-main"><h2>{{ movie.title }}</h2><p>{{ movie.language }} · {{ movie.category }} · updated {{ movie.updated_at.strftime('%b %d, %Y') }}</p></div><a class="button button-quiet" href="{{ url_for('admin_movie_edit', movie_id=movie.id) }}">Edit</a><form method="post" action="{{ url_for('admin_movie_delete', movie_id=movie.id) }}" onsubmit="return confirm('Delete this movie?')"><button class="icon-button" type="submit" aria-label="Delete {{ movie.title }}">×</button></form></div>{% else %}<div class="empty-state"><h2>Your catalog is empty.</h2><a class="button button-dark" href="{{ url_for('admin_movie_new') }}">Add first movie</a></div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}MovieHub | Find your next watch{% endblock %}
+{% block content %}
+<section class="hero" data-featured>
+  {% for movie in featured %}
+  <article class="hero-slide {% if loop.first %}is-active{% endif %}" data-slide-index="{{ loop.index0 }}" style="--hero-image: url('{{ movie.poster_url }}')">
+    <div class="hero-shade"></div>
+    <div class="hero-content">
+      <p class="eyebrow">Featured pick <span>{{ '%02d'|format(loop.index) }}</span></p>
+      <h1>{{ movie.title }}</h1>
+      <div class="hero-meta"><span class="rating">★ {{ movie.rating or '—' }}</span><span>{{ movie.release_year or 'Year TBA' }}</span><span>{{ movie.category or 'Movie' }}</span></div>
+      <p>{{ movie.description }}</p>
+      <a class="button button-light" href="{{ url_for('movie_detail', movie_id=movie.id) }}">View details <span aria-hidden="true">→</span></a>
+    </div>
+  </article>
+  {% else %}
+  <div class="hero-empty"><h1>Build your watchlist.</h1><p>Add your first title from the admin area.</p></div>
+  {% endfor %}
+  {% if featured %}<div class="hero-controls"><button class="hero-arrow" type="button" data-hero-prev aria-label="Previous featured movie">←</button><div class="hero-dots" aria-label="Featured movies">{% for movie in featured %}<button class="hero-dot {% if loop.first %}is-active{% endif %}" data-slide-target="{{ loop.index0 }}" aria-label="Show {{ movie.title }}"></button>{% endfor %}</div><button class="hero-arrow" type="button" data-hero-next aria-label="Next featured movie">→</button></div>{% endif %}
+</section>
+
+{% if not query %}
+<section class="discovery-section">
+  <div class="section-heading"><div><p class="eyebrow">Explore the collection</p><h2>More to discover</h2></div></div>
+  {% for title, section_movies in sections %}{% if section_movies %}<div class="discovery-row"><div class="row-heading"><h3>{{ title }}</h3><span>{{ section_movies|length }} titles</span></div><div class="movie-row">{% for movie in section_movies %}<a class="movie-card" href="{{ url_for('movie_detail', movie_id=movie.id) }}"><div class="poster-wrap"><img src="{{ poster_src(movie.poster_url) }}" alt="Poster for {{ movie.title }}" loading="lazy"><span class="poster-rating">★ {{ movie.rating or '—' }}</span></div><div class="movie-card-copy"><h3>{{ movie.title }}</h3><p>{{ movie.release_year or 'Year TBA' }} <span>·</span> {{ movie.genre or movie.category or 'Movie' }}</p></div></a>{% endfor %}</div></div>{% endif %}{% endfor %}
+</section>
+{% endif %}
+
+<section class="catalog-section" id="catalog">
+  <div class="section-heading">
+    <div><p class="eyebrow">The collection</p><h2>{% if query %}Results for “{{ query }}”{% else %}Find your next favorite{% endif %}</h2></div>
+    <span class="result-count">{{ movies|length }} titles</span>
+  </div>
+  {% if movies %}
+  <div class="movie-grid">{% for movie in movies %}<a class="movie-card" href="{{ url_for('movie_detail', movie_id=movie.id) }}"><div class="poster-wrap"><img src="{{ poster_src(movie.poster_url) }}" alt="Poster for {{ movie.title }}" loading="lazy"><span class="poster-rating">★ {{ movie.rating or '—' }}</span></div><div class="movie-card-copy"><h3>{{ movie.title }}</h3><p>{{ movie.release_year or 'Year TBA' }} <span>·</span> {{ movie.genre or movie.category or 'Movie' }}</p></div></a>{% endfor %}</div>
+  {% else %}<div class="empty-state"><span class="empty-icon">⌕</span><h2>No movies found</h2><p>Try a different title or browse the full collection.</p><a class="button button-dark" href="{{ url_for('index') }}">Back to discover</a></div>{% endif %}
+</section>
+{% endblock %}

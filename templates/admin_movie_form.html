@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Add movie' if is_new else 'Edit ' ~ movie.title }} | MovieHub{% endblock %}
+{% block content %}
+<section class="admin-shell form-shell">
+  <div class="admin-top"><div><a class="back-link" href="{{ url_for('admin_dashboard') }}">← Dashboard</a><p class="eyebrow">Catalog editor</p><h1>{{ 'Add a movie' if is_new else 'Edit movie' }}</h1></div></div>
+  <form method="post" enctype="multipart/form-data" class="movie-form">
+    <div class="form-intro"><p>Use a local poster upload or a valid image URL. Uploaded posters are stored as small static assets with safe filenames.</p><button class="button button-outline" type="button" id="generate-metadata">Generate Metadata</button><span id="metadata-status" class="muted" role="status"></span></div>
+    <div class="poster-source"><label>Upload poster image<input name="poster_file" type="file" accept="image/jpeg,image/png,image/webp"></label><p class="muted">JPG, PNG, or WebP up to 3 MB. {% if movie.poster_url and not movie.poster_url.startswith('http') %}Current upload: {{ movie.poster_url }}{% endif %}</p></div>
+    <div class="form-grid">
+      {% for name, label, type in [('title','Movie title','text'),('rating','Rating','text'),('release_year','Release year','text'),('duration','Duration','text'),('language','Language','text'),('category','Category','text'),('genre','Genre','text'),('cast','Cast','text'),('director','Director','text'),('poster_url','Poster URL','url'),('trailer_url','Trailer URL (YouTube)','url'),('download_4k_url','4K download URL','url'),('download_1080p_url','1080p download URL','url'),('download_720p_url','720p download URL','url'),('download_480p_url','480p download URL','url') ] %}
+      <label class="{% if name in ['poster_url','trailer_url','download_4k_url','download_1080p_url','download_720p_url','download_480p_url'] %}wide-field{% endif %}">{{ label }}<input name="{{ name }}" type="{{ type }}" value="{{ movie|attr(name) or '' }}" {% if name == 'title' %}required{% endif %}></label>
+      {% endfor %}
+      <label class="wide-field">Description<textarea name="description" rows="5">{{ movie.description or '' }}</textarea></label>
+    </div>
+    <div class="form-footer"><a class="button button-quiet" href="{{ url_for('admin_dashboard') }}">Cancel</a><button class="button button-dark" type="submit">Save movie <span>→</span></button></div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}<script>window.metadataEndpoint = "{{ url_for('generate_metadata') }}";</script>{% endblock %}

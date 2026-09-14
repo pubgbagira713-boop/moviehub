@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MovieHub{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='assets/moviehub-logo.png') }}">
+  <link rel="alternate icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{{ url_for('index') }}"><img class="brand-logo" src="{{ url_for('static', filename='assets/moviehub-logo.png') }}" alt="MovieHub logo"><span>MovieHub</span></a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="{{ url_for('index') }}">Discover</a>
+      <a href="{{ url_for('search', q='Malayalam') }}">Malayalam</a>
+      <a href="{{ url_for('search', q='Hindi') }}">Hindi</a>
+      <a href="{{ url_for('search', q='English') }}">English</a>
+      <a href="{{ url_for('search', q='Anime') }}">Animation</a>
+    </nav>
+    <form class="search-form" action="{{ url_for('search') }}" method="get" role="search">
+      <label class="sr-only" for="site-search">Search movies</label>
+      <span class="search-icon" aria-hidden="true">⌕</span>
+      <input id="site-search" name="q" value="{{ query|default('') }}" placeholder="Search movies..." autocomplete="off">
+    </form>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  <footer class="site-footer"><span>MovieHub</span><span>Metadata and links only</span><span>&copy; {{ current_year }}</span></footer>
+  <script src="{{ url_for('static', filename='js/site.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
